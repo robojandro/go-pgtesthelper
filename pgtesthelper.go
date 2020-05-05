@@ -79,7 +79,7 @@ func (h *Helper) CreateTestingDB() error {
 		return errors.Wrapf(err, "failed to read schemaPath %s\n", h.schemaPath)
 	}
 
-	if h.execute(string(schema)); err != nil {
+	if err := h.execute(string(schema)); err != nil {
 		return errors.Wrapf(err, "failed to create scheam %s\n", schema)
 	}
 	return nil
@@ -128,7 +128,9 @@ func (h *Helper) CleanTables(tables []string) error {
 		log.Printf("clearing out table: %s\n", table)
 		res := tx.MustExec(fmt.Sprintf("TRUNCATE TABLE %s", table))
 		if res == nil {
-			tx.Rollback()
+			if err := tx.Rollback(); err != nil {
+				return errors.Wrapf(err, "failed to rollback trucate %s\n", h.dbName)
+			}
 			return errors.New(fmt.Sprintf("failed to truncate %s\n", h.dbName))
 		}
 	}
@@ -149,19 +151,19 @@ func (h *Helper) Query(query string) (*sql.Rows, error) {
 
 func (h *Helper) execute(query string) error {
 	qry, err := h.db.Query(query)
-	defer qry.Close()
 	if err != nil {
 		return err
 	}
+	defer qry.Close()
 	return nil
 }
 
 func (h *Helper) privExecute(query string) error {
 	qry, err := h.pgDB.Query(query)
-	defer qry.Close()
 	if err != nil {
 		return err
 	}
+	defer qry.Close()
 	return nil
 }
 
