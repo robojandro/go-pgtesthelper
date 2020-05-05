@@ -1,8 +1,11 @@
+// +build int
+
 package pgtesthelper_test
 
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"testing"
 	"time"
 
@@ -16,11 +19,19 @@ import (
 func TestHelper(t *testing.T) {
 	var (
 		schemaPath = "./testdata/books.sql"
-		dbUser     = "dev"
-		dbPass     = "dev"
-		dbPrefix   = "testing"
 		keepDB     = false
+		dbPrefix   = "testing"
+		dbUser     = ""
+		dbPass     = ""
 	)
+
+	if dbUser = os.Getenv("pgtesthelper_user"); dbUser == "" {
+		t.Skip("missing env variable pgtesthelper_user")
+	}
+
+	if dbPass = os.Getenv("pgtesthelper_pass"); dbPass == "" {
+		t.Skip("missing env variable pgtesthelper_pass")
+	}
 
 	t.Run("NewHelper", func(t *testing.T) {
 		t.Run("happy", func(t *testing.T) {
