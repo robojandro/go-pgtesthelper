@@ -85,6 +85,12 @@ func (h *Helper) CreateTestingDB() error {
 	return nil
 }
 
+// TestDB returns a reference to the created database handle.
+func (h *Helper) TestDB() *sqlx.DB {
+	return h.db
+}
+
+// DBName returns the name of the created testing database.
 func (h *Helper) DBName() string {
 	return h.dbName
 }
