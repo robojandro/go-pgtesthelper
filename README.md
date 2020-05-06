@@ -27,7 +27,6 @@ if err != nil {
 }
 
 // Get a reference to the handle of the just created database and query away
-dbh := h.TestDB()
 rows, err := dbh.Query(`
   INSERT INTO books (id, title, isbn, created_at) 
   VALUES ('cb0b9721-7631-4b2a-94a2-493c559da893','titleA', '9783161484100', NOW());`)
