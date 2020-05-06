@@ -3,7 +3,6 @@
 package pgtesthelper_test
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"testing"
@@ -50,7 +49,7 @@ func TestHelper(t *testing.T) {
 		h, err := pgtesthelper.NewHelper(schemaPath, dbPrefix, dbUser, dbPass, keepDB)
 		require.NoError(t, err)
 
-		err = h.CreateTestingDB()
+		_, err = h.CreateTempDB()
 		require.NoError(t, err)
 
 		// will panic because table database was dropped
@@ -65,7 +64,7 @@ func TestHelper(t *testing.T) {
 		h, err := pgtesthelper.NewHelper(schemaPath, dbPrefix, dbUser, dbPass, true)
 		require.NoError(t, err)
 
-		err = h.CreateTestingDB()
+		_, err = h.CreateTempDB()
 		require.NoError(t, err)
 
 		// cleanup should be a noop since, but also shouldn't error out
@@ -90,23 +89,26 @@ func TestHelper(t *testing.T) {
 		h, err := pgtesthelper.NewHelper(schemaPath, dbPrefix, dbUser, dbPass, keepDB)
 		require.NoError(t, err)
 
-		err = h.CreateTestingDB()
+		dbh, err := h.CreateTempDB()
 		require.NoError(t, err)
 		defer h.CleanUp()
 
-		mockDB := "./testdata/mockdb.json"
-		err = h.ParseMockData(mockDB, func(mockData []byte) error {
-			return json.Unmarshal(mockData, &data)
-		})
+		rows, err := dbh.Query(`INSERT INTO books (id, title, isbn, created_at) VALUES
+			('cb0b9721-7631-4b2a-94a2-493c559da893','titleA', '9783161484100', NOW());`)
 		require.NoError(t, err)
+		rows.Close()
 
-		err = h.LoadData("./testdata/mockdb.json", insertTestData)
-		require.NoError(t, err)
-
-		rows, err := h.Query("SELECT * FROM BOOKS;")
+		rows, err = dbh.Query("SELECT * FROM BOOKS;")
 		defer rows.Close()
 		require.NoError(t, err)
 
+		// Book is the model representing an book rows used in these tests.
+		type Book struct {
+			ID        string     `db:"id" json:"id,omitempty"`
+			Title     string     `db:"title" json:"title,omitempty"`
+			ISBN      string     `db:"isbn" json:"isbn,omitempty"`
+			CreatedAt *time.Time `db:"created_at" json:"created_at,omitempty"`
+		}
 		res := []Book{}
 		for rows.Next() {
 			var b Book
@@ -114,41 +116,9 @@ func TestHelper(t *testing.T) {
 			require.NoError(t, err)
 			res = append(res, b)
 		}
-		assert.Equal(t, data.Books[0].ID, res[0].ID)
-		assert.Equal(t, data.Books[0].Title, res[0].Title)
-		assert.Equal(t, data.Books[0].ISBN, res[0].ISBN)
+
+		assert.Equal(t, "cb0b9721-7631-4b2a-94a2-493c559da893", res[0].ID)
+		assert.Equal(t, "titleA", res[0].Title)
+		assert.Equal(t, "9783161484100", res[0].ISBN)
 	})
-
-}
-
-var data mockContents
-
-var insertTestData = func(db *sqlx.DB) error {
-	tx := db.MustBegin()
-	bookIn :=
-		`INSERT INTO books (id, title, isbn, created_at)
-			        VALUES (:id, :title, :isbn, NOW());`
-	for _, book := range data.Books {
-		_, err := tx.NamedExec(bookIn, book)
-		if err != nil {
-			tx.Rollback()
-			return err
-		}
-	}
-	if err := tx.Commit(); err != nil {
-		return err
-	}
-	return nil
-}
-
-type mockContents struct {
-	Books []Book `json:"books"`
-}
-
-// Book is the model representing an book rows used in these tests.
-type Book struct {
-	ID        string     `db:"id" json:"id,omitempty"`
-	Title     string     `db:"title" json:"title,omitempty"`
-	ISBN      string     `db:"isbn" json:"isbn,omitempty"`
-	CreatedAt *time.Time `db:"created_at" json:"created_at,omitempty"`
 }

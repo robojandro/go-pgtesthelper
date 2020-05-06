@@ -1,7 +1,6 @@
 package pgtesthelper
 
 import (
-	"database/sql"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -46,67 +45,50 @@ func NewHelper(schemaPath, dbPrefix, dbUser, dbPass string, keepDB bool) (Helper
 	return h, nil
 }
 
-// CreateTestingDB creates database based on the schemaPath schema for use with testing.  It is left upto the called to the call CleanUp() to clean up artifacts.
+// CreateTempDB creates database based on the schemaPath schema, a reference to it will be returned if there are no errors.
+// The database is meant to be temporary, but that can be overridden ignored.
+// It is left up to the caller to the call CleanUp() to remove it.
 // The database name will be suffixed with a unix timestamp giving down to the second uniqueness.
-func (h *Helper) CreateTestingDB() error {
+func (h *Helper) CreateTempDB() (*sqlx.DB, error) {
 	if err := h.privExecute(fmt.Sprintf("DROP DATABASE IF EXISTS %s;", h.dbName)); err != nil {
-		return errors.Wrapf(err, "failed to drop %s\n", h.dbName)
+		return nil, errors.Wrapf(err, "failed to drop %s\n", h.dbName)
 	}
 
 	log.Printf("creating db: %s", h.dbName)
 	if err := h.privExecute(fmt.Sprintf("CREATE DATABASE %s;", h.dbName)); err != nil {
-		return errors.Wrapf(err, "failed to create %s\n", h.dbName)
+		return nil, errors.Wrapf(err, "failed to create %s\n", h.dbName)
 	}
 
 	if err := h.privExecute(fmt.Sprintf("GRANT ALL PRIVILEGES ON DATABASE %s TO %s", h.dbName, h.dbUser)); err != nil {
-		return errors.Wrapf(err, "failed to grant privileges %s\n", h.dbName)
+		return nil, errors.Wrapf(err, "failed to grant privileges %s\n", h.dbName)
 	}
 
 	//connect to the just created DB
 	db, err := sqlx.Connect("postgres",
 		fmt.Sprintf("user=%s dbname=%s sslmode=disable", h.dbUser, h.dbName))
 	if err != nil {
-		return errors.Wrapf(err, "cannot connect to %s\n", h.dbName)
+		return nil, errors.Wrapf(err, "cannot connect to %s\n", h.dbName)
 	}
 	if err := db.Ping(); err != nil {
-		return errors.Wrapf(err, "could not ping %s\n", h.dbName)
+		return nil, errors.Wrapf(err, "could not ping %s\n", h.dbName)
 	}
 	h.db = db
 
 	//read and apply the schema
 	schema, err := ioutil.ReadFile(h.schemaPath)
 	if err != nil {
-		return errors.Wrapf(err, "failed to read schemaPath %s\n", h.schemaPath)
+		return nil, errors.Wrapf(err, "failed to read schemaPath %s\n", h.schemaPath)
 	}
 
 	if err := h.execute(string(schema)); err != nil {
-		return errors.Wrapf(err, "failed to create scheam %s\n", schema)
+		return nil, errors.Wrapf(err, "failed to create scheam %s\n", schema)
 	}
-	return nil
-}
-
-// TestDB returns a reference to the created database handle.
-func (h *Helper) TestDB() *sqlx.DB {
-	return h.db
+	return h.db, nil
 }
 
 // DBName returns the name of the created testing database.
 func (h *Helper) DBName() string {
 	return h.dbName
-}
-
-// ParseMockData allows the calling code to control how to insert data.
-func (h *Helper) ParseMockData(mockDataFile string, fn func(mocked []byte) error) error {
-	mockData, err := ioutil.ReadFile(mockDataFile)
-	if err != nil {
-		return err
-	}
-	return fn(mockData)
-}
-
-// LoadData allows the calling code to control how to insert data.
-func (h *Helper) LoadData(mockObj interface{}, insertFn func(db *sqlx.DB) error) error {
-	return insertFn(h.db)
 }
 
 func (h *Helper) CloseConnection() {
@@ -144,15 +126,6 @@ func (h *Helper) CleanTables(tables []string) error {
 		return errors.Wrapf(err, "failed to commit truncating %s: \n", h.dbName)
 	}
 	return nil
-}
-
-// Query passthrough for arbitrary queries to the temporary database.
-func (h *Helper) Query(query string) (*sql.Rows, error) {
-	rows, err := h.db.Query(query)
-	if err != nil {
-		return nil, err
-	}
-	return rows, nil
 }
 
 func (h *Helper) execute(query string) error {
