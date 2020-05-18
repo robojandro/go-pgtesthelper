@@ -114,7 +114,7 @@ func (h *Helper) CleanTables(tables []string) error {
 	tx := h.db.MustBegin()
 	for _, table := range tables {
 		log.Printf("clearing out table: %s\n", table)
-		res := tx.MustExec(fmt.Sprintf("TRUNCATE TABLE %s", table))
+		res := tx.MustExec(fmt.Sprintf("TRUNCATE TABLE %s CASCADE", table))
 		if res == nil {
 			if err := tx.Rollback(); err != nil {
 				return errors.Wrapf(err, "failed to rollback trucate %s\n", h.dbName)
