@@ -15,7 +15,7 @@ I liked that pattern and missed at a recent gig, so decided to take a stab at co
 ## Usage
 ```
 // Get a helper type value to work with
-h, err := pgtesthelper.NewHelper("./sql/mydb.sql", "mydb", "myuser", "password", false)
+h, err := pgtesthelper.NewHelper("./sql/schema.sql", "mydb", "myuser", "password", false)
 if err != nil {
     return err
 }

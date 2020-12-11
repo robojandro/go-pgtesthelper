@@ -65,7 +65,7 @@ func (h *Helper) CreateTempDB() (*sqlx.DB, error) {
 
 	//connect to the just created DB
 	db, err := sqlx.Connect("postgres",
-		fmt.Sprintf("user=%s dbname=%s sslmode=disable", h.dbUser, h.dbName))
+		fmt.Sprintf("user=%s password=%s dbname=%s sslmode=disable", h.dbUser, h.dbPass, h.dbName))
 	if err != nil {
 		return nil, errors.Wrapf(err, "cannot connect to %s\n", h.dbName)
 	}
@@ -147,7 +147,7 @@ func (h *Helper) privExecute(query string) error {
 }
 
 func (h *Helper) pgDBConnect() error {
-	pgDB, err := sqlx.Connect(driver, fmt.Sprintf("user=%s dbname=%s sslmode=disable", h.dbUser, "postgres"))
+	pgDB, err := sqlx.Connect(driver, fmt.Sprintf("user=%s password=%s dbname=%s sslmode=disable", h.dbUser, h.dbPass, "postgres"))
 	if err != nil {
 		return errors.Wrap(err, "cannot connect to postgres db")
 	}
