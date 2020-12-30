@@ -6,14 +6,18 @@ import (
 	"log"
 	"time"
 
-	"github.com/jmoiron/sqlx"
+	// we just need the postgres driver
 	_ "github.com/lib/pq"
+
+	"github.com/jmoiron/sqlx"
 	errors "github.com/pkg/errors"
 )
 
 var driver = "postgres"
 
-// Helper is a struct containing private references to the database handles necessary for creating and using temporary db, a prefix for naming it, and connection details.
+// Helper is a struct containing private references to the database
+// handles necessary for creating and using temporary db, a prefix
+// for naming it, and connection details.
 type Helper struct {
 	pgDB *sqlx.DB
 	db   *sqlx.DB
@@ -27,7 +31,8 @@ type Helper struct {
 	keepDB bool
 }
 
-// NewHelper returns a new pgtesthelper.Helper value after establishing a connection to the local postgres database
+// NewHelper returns a new pgtesthelper.Helper value after establishing
+// a connection to the local postgres database
 func NewHelper(schemaPath, dbPrefix, dbUser, dbPass string, keepDB bool) (Helper, error) {
 	now := time.Now()
 	h := Helper{
@@ -45,7 +50,8 @@ func NewHelper(schemaPath, dbPrefix, dbUser, dbPass string, keepDB bool) (Helper
 	return h, nil
 }
 
-// CreateTempDB creates database based on the schemaPath schema, a reference to it will be returned if there are no errors.
+// CreateTempDB creates database based on the schemaPath schema, a
+// reference to it will be returned if there are no errors.
 // The database is meant to be temporary, but that can be overridden ignored.
 // It is left up to the caller to the call CleanUp() to remove it.
 // The database name will be suffixed with a unix timestamp giving down to the second uniqueness.
@@ -91,11 +97,13 @@ func (h *Helper) DBName() string {
 	return h.dbName
 }
 
+// CloseConnection will call close on the Helper database handle.
 func (h *Helper) CloseConnection() {
 	h.db.Close()
 }
 
-// CleanUp will remove artifacts from testing. Currently that means dropping the temporary database created for this usage.
+// CleanUp will remove artifacts from testing. Currently that means
+// dropping the temporary database created for this usage.
 func (h *Helper) CleanUp() error {
 	if h.keepDB {
 		log.Printf("keeping db: %s", h.dbName)
@@ -109,7 +117,8 @@ func (h *Helper) CleanUp() error {
 	return nil
 }
 
-// CleanTables loops over the given list of tables and attempts to truncate them. It will return an error rather than halting execution.
+// CleanTables loops over the given list of tables and attempts to
+// truncate them. It will return an error rather than halting execution.
 func (h *Helper) CleanTables(tables []string) error {
 	tx := h.db.MustBegin()
 	for _, table := range tables {
@@ -124,6 +133,37 @@ func (h *Helper) CleanTables(tables []string) error {
 	}
 	if err := tx.Commit(); err != nil {
 		return errors.Wrapf(err, "failed to commit truncating %s: \n", h.dbName)
+	}
+	return nil
+}
+
+// CleanTablesAndSequences loops over the given list of tables and
+// sequences to attempt to truncate and reset them. It will return an
+// error rather than halting execution.
+func (h *Helper) CleanTablesAndSequences(tables []string, sequences []string) error {
+	tx := h.db.MustBegin()
+	for _, table := range tables {
+		log.Printf("clearing out table: %s\n", table)
+		res := tx.MustExec(fmt.Sprintf("TRUNCATE TABLE %s CASCADE", table))
+		if res == nil {
+			if err := tx.Rollback(); err != nil {
+				return errors.Wrapf(err, "failed to rollback truncate %s on %s\n", table, h.dbName)
+			}
+			return errors.Errorf("failed to truncate %s on %s\n", table, h.dbName)
+		}
+	}
+	for _, seq := range sequences {
+		log.Printf("resetting sequence: %s\n", seq)
+		res := tx.MustExec(fmt.Sprintf("ALTER SEQUENCE %s RESTART WITH 1", seq))
+		if res == nil {
+			if err := tx.Rollback(); err != nil {
+				return errors.Wrapf(err, "failed to rollback resetting of sequence %s on %s\n", seq, h.dbName)
+			}
+			return errors.Errorf("failed to reset sequence %s on %s\n", seq, h.dbName)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return errors.Wrapf(err, "failed to commit truncating and resetting of sequences %s: \n", h.dbName)
 	}
 	return nil
 }

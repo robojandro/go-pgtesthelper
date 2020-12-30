@@ -1,4 +1,4 @@
-// +build int
+// +build integration
 
 package pgtesthelper_test
 
@@ -77,7 +77,7 @@ func TestHelper(t *testing.T) {
 		// now you have to clean up the temp db manually however, starting with closing
 		// the connection
 		h.CloseConnection()
-		pgDB, err := sqlx.Connect("postgres", fmt.Sprintf("user=%s dbname=%s sslmode=disable", dbUser, "postgres"))
+		pgDB, err := sqlx.Connect("postgres", fmt.Sprintf("user=%s password=%s dbname=%s sslmode=disable", dbUser, dbPass, "postgres"))
 		require.NoError(t, err)
 		qry, err := pgDB.Query(fmt.Sprintf("DROP DATABASE IF EXISTS %s;", h.DBName()))
 		require.NoError(t, err)
@@ -120,5 +120,59 @@ func TestHelper(t *testing.T) {
 		assert.Equal(t, "cb0b9721-7631-4b2a-94a2-493c559da893", res[0].ID)
 		assert.Equal(t, "titleA", res[0].Title)
 		assert.Equal(t, "9783161484100", res[0].ISBN)
+	})
+
+	t.Run("table_and_sequence_clearing", func(t *testing.T) {
+		h, err := pgtesthelper.NewHelper("./testdata/dogbreeds.sql", dbPrefix, dbUser, dbPass, keepDB)
+		require.NoError(t, err)
+
+		dbh, err := h.CreateTempDB()
+		require.NoError(t, err)
+		defer h.CleanUp()
+
+		rows, err := dbh.Query(`INSERT INTO dogbreed (name) VALUES ('labrador'), ('beagle');`)
+		require.NoError(t, err)
+		rows.Close()
+
+		rows, err = dbh.Query("SELECT * FROM dogbreed;")
+		defer rows.Close()
+		require.NoError(t, err)
+
+		// Dogbreed is the model representing dog breeds
+		type Dogbreed struct {
+			ID   int64  `db:"id" json:"id,omitempty"`
+			Name string `db:"name" json:"name,omitempty"`
+		}
+		res := []Dogbreed{}
+		for rows.Next() {
+			var d Dogbreed
+			err = rows.Scan(&d.ID, &d.Name)
+			require.NoError(t, err)
+			res = append(res, d)
+		}
+		require.Len(t, res, 2)
+		assert.Equal(t, "beagle", res[1].Name)
+
+		err = h.CleanTablesAndSequences([]string{"dogbreed"}, []string{"dogbreed_id_seq"})
+		require.NoError(t, err)
+
+		_, err = dbh.Query(`INSERT INTO dogbreed (name) VALUES ('poodle');`)
+		require.NoError(t, err)
+		rows.Close()
+
+		rows2, err := dbh.Query("SELECT * FROM dogbreed;")
+		defer rows2.Close()
+		require.NoError(t, err)
+
+		res2 := []Dogbreed{}
+		for rows2.Next() {
+			var d Dogbreed
+			err = rows2.Scan(&d.ID, &d.Name)
+			require.NoError(t, err)
+			res2 = append(res2, d)
+		}
+		require.Len(t, res2, 1)
+		assert.Equal(t, int64(1), res2[0].ID)
+		assert.Equal(t, "poodle", res2[0].Name)
 	})
 }
